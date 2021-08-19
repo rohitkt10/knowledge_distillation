@@ -1,1 +1,2 @@
-from . import cnn
+from . import cnn25
+from . import cnn4
