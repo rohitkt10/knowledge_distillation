@@ -1,0 +1,11 @@
+*.ipynb
+*.h5
+*.tfrecords
+*.npy
+*.npz
+*.hdf5
+*.data*
+*.index
+*.pb
+*.lua
+*.mat
