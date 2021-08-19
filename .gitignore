@@ -9,3 +9,9 @@
 *.pb
 *.lua
 *.mat
+*.py.swp
+*.csv
+*.tsv
+./experiments/results/
+*.pyc
+*__pycache__/*

@@ -10,7 +10,7 @@ def get_model(
         name="cnn_25"
         ):
     """
-    Set up the first convolutional layer outside this function. 
+    Conv1d -> Maxpool4 -> Conv1D -> Maxpool4 -> Dense128 -> Output.  
     """
 
     # input layer
@@ -41,7 +41,7 @@ def get_model(
     y = tfk.layers.MaxPool1D(pool_size=4)(y) 
     y = tfk.layers.Dropout(0.2)(y)
     
-    # flatten and dense  layer
+    # flatten and dense layer
     y = tfk.layers.Flatten()(y)
     y = tfk.layers.Dense(128, kernel_regularizer=tfk.regularizers.l2(1e-6))(y)      
     y = tfk.layers.BatchNormalization()(y)

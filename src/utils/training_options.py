@@ -11,6 +11,9 @@ __all__ = ['get_callbacks', 'get_compile_options']
 
 
 def get_compile_options(baselr, output_type='binary',):
+	"""
+	Set up the model compile options. 
+	"""
 	output_type = output_type.lower().strip()
 	assert output_type in ['binary', 'categorical', 'sparse_categorical']
 
@@ -43,20 +46,26 @@ def get_compile_options(baselr, output_type='binary',):
 	return compile_options
 
 
-def get_callbacks(ckptdir, monitor):
-	ckptdir = os.path.abspath(ckptdir)
-	if not os.path.exists(ckptdir):
-		os.makedirs(ckptdir)
+def get_callbacks(monitor, ckptdir=None):
+	"""
+	Set up the callbacks. 
+	"""
 	es_callback = tfk.callbacks.EarlyStopping(monitor, patience=20, verbose=1, mode='max',)
 	lr_callback = tfk.callbacks.ReduceLROnPlateau(monitor, patience=20, verbose=1, mode='max')
-	ckpt_callback = tfk.callbacks.ModelCheckpoint(
-												filepath=os.path.join(ckptdir, "ckpt_epoch-{epoch:04d}"),
-												monitor=monitor,
-												verbose=1,
-												mode='max',
-												save_best_only=True,
-												save_weights_only=False
-												)
 	csvlogger = tfk.callbacks.CSVLogger(os.path.join(ckptdir, "log.csv"))
-	callbacks = [es_callback, lr_callback, ckpt_callback, csvlogger]
+	callbacks = [es_callback, lr_callback, csvlogger]
+
+	if ckptdir:
+		ckptdir = os.path.abspath(ckptdir)
+		if not os.path.exists(ckptdir):
+			os.makedirs(ckptdir)
+		ckpt_callback = tfk.callbacks.ModelCheckpoint(
+													filepath=os.path.join(ckptdir, "ckpt_epoch-{epoch:04d}"),
+													monitor=monitor,
+													verbose=1,
+													mode='max',
+													save_best_only=True,
+													save_weights_only=False
+														)
+		callbacks.append(ckpt_callback)
 	return callbacks

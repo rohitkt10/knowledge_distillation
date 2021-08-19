@@ -31,10 +31,9 @@ class GaussianNoiseAugmentation(Augmentation):
 
 class RCAugmentation(Augmentation):
     def __call__(self, data):
-    x, y = data
-    x_rc = x[:, ::-1, ::-1]
-    return (x_rc, y)
-
+        x, y = data
+        x_rc = x[:, ::-1, ::-1]
+        return (x_rc, y)
 
 class ShiftAugmentation(Augmentation):
     def __init__(self, shift, direction='right'):
