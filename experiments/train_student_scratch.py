@@ -92,6 +92,9 @@ def main():
 	parser.add_argument("--epochs", default=100, help="Epochs", type=int)
 	parser.add_argument("--steps_per_epoch", default=None, help="Number of steps per epoch", type=int)
 	parser.add_argument("--evaluate_steps", default=None, help="Number of evaluation steps", type=int)
+	parser.add_argument("--rc", default=False, type=bool, help="Whether to add reverse compliment data augmentation")
+	parser.add_argument("--mixup", default=0., type=float, help="Concentration parameter for beta distribution in mixup.")
+	parser.add_argument("--gaussian_noise", default=0., type=float, help="standard deviation of input Gaussian noise")
 	args = parser.parse_args()
 
 	# get the dataset
@@ -131,7 +134,7 @@ def main():
 	res = testing(
 			dataset_name=args.dataset, 
 			student_name=args.student, 
-			test_dataset=dataset['test'].batch(batch_size),
+			test_dataset=dataset['test'].shuffle(10000).batch(batch_size),
 			options={"verbose":1, "steps":args.evaluate_steps}
 				)
 

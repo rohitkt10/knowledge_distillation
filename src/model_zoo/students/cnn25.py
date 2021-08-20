@@ -10,7 +10,7 @@ def get_model(
         name="cnn_25"
         ):
     """
-    Set up the first convolutional layer outside this function. 
+    Conv1d -> Maxpool25 -> Conv1D -> Maxpool2 -> Dense256 -> Output.  
     """
 
     # input layer

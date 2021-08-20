@@ -1,6 +1,14 @@
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 
+__all__ = [
+    'Augmentation', 
+    'MixupAugmentation', 
+    'RCAugmentation', 
+    'GaussianNoiseAugmentation', 
+    'ShiftAugmentation'
+        ]
+
 class Augmentation():
     def __call__(self, data):
         raise NotImplementedError()
@@ -48,3 +56,35 @@ class ShiftAugmentation(Augmentation):
         else:
             xs = tf.roll(x, shift=-self.shift, axis=1)
         return (xs, y)
+
+class AugmentedModel(tfk.Model):
+    def __init__(self, model, augmentations, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        assert len(augmentations) > 0, 'Pass some augmentation strategies.'
+        assert np.all([isinstance(aug, Augmentation) for aug in augmentations]), \
+                            'Augmentations have to be instances of the Augmentation class'
+        self.model = model
+        self.augmentations = augmentations
+
+    def call(self, *args, **kwargs):
+        return self.model(*args, **kwargs)
+
+    def save(self, *args, **kwargs):
+        return self.model.save(*args, **kwargs)
+
+    def save_weights(self, *args, **kwargs):
+        return self.model.save_weights(*args, **kwargs)
+
+    def compile(self, *args, **kwargs):
+        self.model.compile(*args, **kwargs)  ## necessary to save the compile options 
+        super().compile(*args, **kwargs)
+
+    def train_step(self, data):
+    x, y = data
+    xs, ys = [x], [y] 
+    for augmentation in self.augmentations:
+        _x, _y = augmentation(data)
+        xs.append(_x)
+        ys.append(_y)
+    x, y = tf.concat(xs, axis=0), tf.concat(ys, axis=0)
+    return super().train_step((x, y))
