@@ -11,6 +11,7 @@ import pandas as pd
 import argparse
 import tensorflow as tf
 from tensorflow import keras as tfk
+from src import RCAugmentation, MixupAugmentation, GaussianNoiseAugmentation, AugmentedModel
 from src import utils
 from src.utils import get_callbacks, get_compile_options
 from pdb import set_trace as keyboard
@@ -24,8 +25,10 @@ DATALOADERS = {
 	'deepsea':utils.get_deepsea_dataset,
 }
 
-def _get_model_and_compile(get_model_fn, get_model_fn_kwargs, compile_options):
+def _get_model_and_compile(get_model_fn, get_model_fn_kwargs, augmentations, compile_options):
 	model = get_model_fn(**get_model_fn_kwargs)
+	if len(augmentations):
+		model = AugmentedModel(model, augmentations)
 	model.compile(**compile_options)
 	return model
 
@@ -51,6 +54,7 @@ def training(
 			dataset,
 			get_model_fn, 
 			get_model_fn_kwargs={},
+			augmentations=[],
 			ckptdir=None,
 			batch_size=64,
 			monitor='val_aupr',
@@ -68,10 +72,11 @@ def training(
 	if strategy:
 		with strategy.scope():
 			compile_options = get_compile_options(baselr=4e-3)
-			model = _get_model_and_compile(get_model_fn, get_model_fn_kwargs, compile_options)
+			model = _get_model_and_compile(get_model_fn, get_model_fn_kwargs, augmentations, compile_options)
+
 	else:
 		compile_options = get_compile_options(baselr=4e-3)
-		model = _get_model_and_compile(get_model_fn, get_model_fn_kwargs, compile_options)
+		model = _get_model_and_compile(get_model_fn, get_model_fn_kwargs, augmentations, compile_options)
 	print("Model compiled...")
 
 	# fit the model
@@ -92,7 +97,8 @@ def main():
 	parser.add_argument("--epochs", default=100, help="Epochs", type=int)
 	parser.add_argument("--steps_per_epoch", default=None, help="Number of steps per epoch", type=int)
 	parser.add_argument("--evaluate_steps", default=None, help="Number of evaluation steps", type=int)
-	parser.add_argument("--rc", default=False, type=bool, help="Whether to add reverse compliment data augmentation")
+	parser.add_argument("--rc", action="store_true", help="Add reverse compliment data augmentation")
+	parser.add_argument("--no-rc", action="store_true", help="Do not add reverse compliment data augmentation")
 	parser.add_argument("--mixup", default=0., type=float, help="Concentration parameter for beta distribution in mixup.")
 	parser.add_argument("--gaussian_noise", default=0., type=float, help="standard deviation of input Gaussian noise")
 	args = parser.parse_args()
@@ -104,6 +110,17 @@ def main():
 
 	# get the student model file 
 	student = getattr(import_module("model_zoo.students"), args.student)
+
+	# get the augmentations if any
+	augmentations = []
+	if args.rc:
+		augmentations.append(RCAugmentation())
+	if args.mixup:
+		assert args.mixup > 0., "Mixup beta distribution concentration param must be positive"
+		augmentations.append(MixupAugmentation(alpha=args.mixup))
+	if args.gaussian_noise:
+		assert args.gaussian_noise > 0, "Gaussian noise s.d. must be positive."
+		augmentations.append(GaussianNoiseAugmentation(stddev=args.gaussian_noise))
 
 	# set up the checkpoint directory
 	ckptdir = os.path.join(args.ckpt, "student_scratch", args.dataset, args.student)
@@ -126,6 +143,7 @@ def main():
 	training(
 		dataset,
 		get_model_fn = student.get_model,
+		augmentations = augmentations, 
 		ckptdir=ckptdir,
 		fit_options=fit_options,
 			)

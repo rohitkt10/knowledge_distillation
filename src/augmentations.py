@@ -1,12 +1,15 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow_probability import distributions as tfd
+from tensorflow import keras as tfk
 
 __all__ = [
     'Augmentation', 
     'MixupAugmentation', 
     'RCAugmentation', 
     'GaussianNoiseAugmentation', 
-    'ShiftAugmentation'
+    'ShiftAugmentation',
+    'AugmentedModel',
         ]
 
 class Augmentation():
@@ -67,7 +70,7 @@ class AugmentedModel(tfk.Model):
         self.augmentations = augmentations
 
     def call(self, *args, **kwargs):
-        return self.model(*args, **kwargs)
+        return self.model.call(*args, **kwargs)
 
     def save(self, *args, **kwargs):
         return self.model.save(*args, **kwargs)
@@ -80,11 +83,11 @@ class AugmentedModel(tfk.Model):
         super().compile(*args, **kwargs)
 
     def train_step(self, data):
-    x, y = data
-    xs, ys = [x], [y] 
-    for augmentation in self.augmentations:
-        _x, _y = augmentation(data)
-        xs.append(_x)
-        ys.append(_y)
-    x, y = tf.concat(xs, axis=0), tf.concat(ys, axis=0)
-    return super().train_step((x, y))
+        x, y = data
+        xs, ys = [x], [y] 
+        for augmentation in self.augmentations:
+            _x, _y = augmentation(data)
+            xs.append(_x)
+            ys.append(_y)
+        x, y = tf.concat(xs, axis=0), tf.concat(ys, axis=0)
+        return super().train_step((x, y))
