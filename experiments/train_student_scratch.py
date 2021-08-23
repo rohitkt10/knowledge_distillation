@@ -32,20 +32,14 @@ def _get_model_and_compile(get_model_fn, get_model_fn_kwargs, augmentations, com
 	model.compile(**compile_options)
 	return model
 
-def testing(dataset_name, student_name, test_dataset, options={}):
-	# get the latest trials directory
-	ckptdir=os.path.join(RESULTSDIR, "student_scratch", dataset_name, student_name)
-	trials = [f for f in os.listdir(ckptdir) if 'trial' in f]
-	trials.sort() 
-
+def testing(test_dataset, ckptdir, evaluate_options={}):
 	# get the latest checkpoint directory 
-	ckptdir=os.path.join(ckptdir, trials[-1])
 	ckpts=[f for f in os.listdir(ckptdir) if 'ckpt' in f]
 	ckpts.sort()
 
 	# load the model and evaluate 
 	model=tfk.models.load_model(os.path.join(ckptdir, ckpts[-1]))
-	res = model.evaluate(test_dataset, return_dict=True, **options)
+	res = model.evaluate(test_dataset, return_dict=True, **evaluate_options)
 	res = pd.DataFrame(columns=list(res.keys()),data=[list(res.values())])
 	res.to_csv(os.path.join(ckptdir, "test_results.csv"))
 
@@ -123,7 +117,17 @@ def main():
 		augmentations.append(GaussianNoiseAugmentation(stddev=args.gaussian_noise))
 
 	# set up the checkpoint directory
-	ckptdir = os.path.join(args.ckpt, "student_scratch", args.dataset, args.student)
+	rc = "rc" if args.rc else "no-rc"
+	mx = "mixup=%s"%str(args.mixup)
+	gn = "gn=%s"%str(args.gaussian_noise)
+	ckptdir = os.path.join(
+						args.ckpt, 
+						"student_scratch", 
+						args.dataset, 
+						args.student, 
+						rc, 
+						mx, 
+						gn)
 	if not os.path.exists(ckptdir):
 		trial = 1
 	else:
@@ -131,6 +135,7 @@ def main():
 		trial = num_trials + 1
 	ckptdir = os.path.join(ckptdir, f'trial-{trial:05d}')
 	os.makedirs(ckptdir)
+	print("Results will be saved to :\n%s"%str(ckptdir))
 
 	# get model.fit options 
 	batch_size = args.batch ## keeping this separate to stay compatible with tf.data.Dataset usage
@@ -150,10 +155,9 @@ def main():
 
 	# test the model and save test results 
 	res = testing(
-			dataset_name=args.dataset, 
-			student_name=args.student, 
 			test_dataset=dataset['test'].shuffle(10000).batch(batch_size),
-			options={"verbose":1, "steps":args.evaluate_steps}
+			ckptdir=ckptdir,
+			evaluate_options={"verbose":1, "steps":args.evaluate_steps}
 				)
 
 if __name__ == '__main__':

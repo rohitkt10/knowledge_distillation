@@ -9,9 +9,13 @@
 *.pb
 *.lua
 *.mat
-*.py.swp
+*.swp
 *.csv
 *.tsv
+*.pyc
 ./experiments/results/
 *.pyc
 *__pycache__/*
+**/.ipynb_checkpoints
+./src/*.ipynb
+./src/*/*.ipynb

@@ -4,10 +4,10 @@ from tensorflow_probability import distributions as tfd
 from tensorflow import keras as tfk
 
 __all__ = [
-    'Augmentation', 
-    'MixupAugmentation', 
-    'RCAugmentation', 
-    'GaussianNoiseAugmentation', 
+    'Augmentation',
+    'MixupAugmentation',
+    'RCAugmentation',
+    'GaussianNoiseAugmentation',
     'ShiftAugmentation',
     'AugmentedModel',
         ]
@@ -79,15 +79,20 @@ class AugmentedModel(tfk.Model):
         return self.model.save_weights(*args, **kwargs)
 
     def compile(self, *args, **kwargs):
-        self.model.compile(*args, **kwargs)  ## necessary to save the compile options 
+        self.model.compile(*args, **kwargs)  ## necessary to save the compile options
         super().compile(*args, **kwargs)
 
-    def train_step(self, data):
+    def get_augmented_data(self, data):
         x, y = data
-        xs, ys = [x], [y] 
+        xs, ys = [x], [y]
         for augmentation in self.augmentations:
             _x, _y = augmentation(data)
             xs.append(_x)
             ys.append(_y)
         x, y = tf.concat(xs, axis=0), tf.concat(ys, axis=0)
-        return super().train_step((x, y))
+        data = (x, y)
+        return data
+
+    def train_step(self, data):
+        data = self.get_augmented_data(data)
+        return super().train_step(data)
