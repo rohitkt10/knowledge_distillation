@@ -71,7 +71,7 @@ def get_model(
         tf.keras.layers.Dense(num_classes, name="logits"),
             ]
     if not logits_only:
-        layers.append(tf.keras.layers.Activation('sigmoid'), name='probabilities')
+        layers.append(tf.keras.layers.Activation('sigmoid', name='probabilities'))
 
     model = tf.keras.Sequential(layers=layers, name=name)
     return model

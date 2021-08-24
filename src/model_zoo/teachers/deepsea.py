@@ -10,7 +10,7 @@ def get_model(
     kernel_initializer="glorot_normal",
     logits_only=False,
     name="deepsea",
-):
+            ):
     """Return `tf.keras` implementation of DeepSEA.
     The model in this file is a translation from the original Lua/Torch code.
     """
@@ -18,7 +18,7 @@ def get_model(
     layers = [
         # Layer 0
         tf.keras.Input(input_shape, name='layer0/input'),
-        
+
         # Layer 1.
         tf.keras.layers.Conv1D(
             filters=320,
