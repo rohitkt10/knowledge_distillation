@@ -1,6 +1,6 @@
 """
-A script that puts down standard model compilation / training 
-choices. 
+A script that puts down standard model compilation / training
+choices.
 """
 
 import tensorflow as tf
@@ -12,7 +12,7 @@ __all__ = ['get_callbacks', 'get_compile_options']
 
 def get_compile_options(baselr, output_type='binary',):
 	"""
-	Set up the model compile options. 
+	Set up the model compile options.
 	"""
 	output_type = output_type.lower().strip()
 	assert output_type in ['binary', 'categorical', 'sparse_categorical']
@@ -46,15 +46,21 @@ def get_compile_options(baselr, output_type='binary',):
 	return compile_options
 
 
-def get_callbacks(monitor, ckptdir=None):
+def get_callbacks(monitor, ckptdir=None, save_best_only=True, save_freq="epoch",
+					early_stopping=True, reduce_lr_on_plateau=True, log_to_csv=True):
 	"""
-	Set up the callbacks. 
+	Set up the callbacks.
 	"""
-	es_callback = tfk.callbacks.EarlyStopping(monitor, patience=20, verbose=1, mode='max',)
-	lr_callback = tfk.callbacks.ReduceLROnPlateau(monitor, patience=20, verbose=1, mode='max')
-	csvlogger = tfk.callbacks.CSVLogger(os.path.join(ckptdir, "log.csv"))
-	callbacks = [es_callback, lr_callback, csvlogger]
-
+	callbacks = []
+	if early_stopping:
+		es_callback = tfk.callbacks.EarlyStopping(monitor, patience=20, verbose=1, mode='max',)
+		callbacks.append(es_callback)
+	if reduce_lr_on_plateau:
+		lr_callback = tfk.callbacks.ReduceLROnPlateau(monitor, patience=20, verbose=1, mode='max')
+		callbacks.append(lr_callback)
+	if log_to_csv:
+		csvlogger = tfk.callbacks.CSVLogger(os.path.join(ckptdir, "log.csv"))
+		callbacks.append(csvlogger)
 	if ckptdir:
 		ckptdir = os.path.abspath(ckptdir)
 		if not os.path.exists(ckptdir):
@@ -64,8 +70,9 @@ def get_callbacks(monitor, ckptdir=None):
 													monitor=monitor,
 													verbose=1,
 													mode='max',
-													save_best_only=True,
-													save_weights_only=False
+													save_best_only=save_best_only,
+													save_weights_only=False,
+													save_freq=save_freq,
 														)
 		callbacks.append(ckpt_callback)
 	return callbacks

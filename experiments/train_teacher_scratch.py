@@ -82,53 +82,34 @@ def training(
 		**fit_options,
 			)
 
+
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("--dataset",default="deepsea", help="dataset", type=str)
-	parser.add_argument("--student", default="cnn4", help="Student Model", type=str)
+	parser.add_argument("--teacher", default="deepsea", help="Teacher Model", type=str)
 	parser.add_argument("--ckpt", default=RESULTSDIR, help="Results directory", type=str)
 	parser.add_argument("--batch", default=64, help="Batch size", type=int)
 	parser.add_argument("--epochs", default=100, help="Epochs", type=int)
 	parser.add_argument("--steps_per_epoch", default=None, help="Number of steps per epoch", type=int)
 	parser.add_argument("--evaluate_steps", default=None, help="Number of evaluation steps", type=int)
-	parser.add_argument("--rc", action="store_true", help="Add reverse compliment data augmentation")
-	parser.add_argument("--no-rc", action="store_true", help="Do not add reverse compliment data augmentation")
-	parser.add_argument("--mixup", default=0., type=float, help="Concentration parameter for beta distribution in mixup.")
-	parser.add_argument("--gaussian_noise", default=0., type=float, help="standard deviation of input Gaussian noise")
 	args = parser.parse_args()
 
-	# get the dataset
+    # get the dataset
 	datadir = DATADIRS[args.dataset]
 	dataloader = DATALOADERS[args.dataset]
 	dataset = dataloader(datadir=datadir)
 
-	# get the student model file
-	student = getattr(import_module("model_zoo.students"), args.student)
+    # get the teacher model file
+	student = getattr(import_module("model_zoo.teachers"), args.teacher)
 
-	# get the augmentations if any
-	augmentations = []
-	if args.rc:
-		augmentations.append(RCAugmentation())
-	if args.mixup:
-		assert args.mixup > 0., "Mixup beta distribution concentration param must be positive"
-		augmentations.append(MixupAugmentation(alpha=args.mixup))
-	if args.gaussian_noise:
-		assert args.gaussian_noise > 0, "Gaussian noise s.d. must be positive."
-		augmentations.append(GaussianNoiseAugmentation(stddev=args.gaussian_noise))
-
-	# set up the checkpoint directory
-	rc = "rc" if args.rc else "no-rc"
-	mx = "mixup=%s"%str(args.mixup)
-	gn = "gn=%s"%str(args.gaussian_noise)
-	ckptdir = os.path.join(
+    # set up the checkpoint directory
+    ckptdir = os.path.join(
 						args.ckpt,
-						"student_scratch",
+						"teacher_scratch",
 						args.dataset,
-						args.student,
-						rc,
-						mx,
-						gn)
-	if not os.path.exists(ckptdir):
+						args.teacher,
+                        )
+    if not os.path.exists(ckptdir):
 		trial = 1
 	else:
 		num_trials = len([f for f in os.listdir(ckptdir) if 'trial' in f])
@@ -137,23 +118,22 @@ def main():
 	os.makedirs(ckptdir)
 	print("Results will be saved to :\n%s"%str(ckptdir))
 
-	# get model.fit options
+    # get model.fit options
 	batch_size = args.batch ## keeping this separate to stay compatible with tf.data.Dataset usage
 	fit_options = {
 	'epochs':args.epochs,
 	'steps_per_epoch':args.steps_per_epoch,
 	}
 
-	# Train the model and save results
+    # Train the model and save results
 	training(
 		dataset,
-		get_model_fn = student.get_model,
-		augmentations = augmentations,
+		get_model_fn = teacher.get_model,
 		ckptdir=ckptdir,
 		fit_options=fit_options,
 			)
 
-	# test the model and save test results
+    # test the model and save test results
 	res = testing(
 			test_dataset=dataset['test'].shuffle(10000).batch(batch_size),
 			ckptdir=ckptdir,
