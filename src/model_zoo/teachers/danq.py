@@ -8,6 +8,7 @@ def get_model(
     activation=tf.nn.relu,
     first_activation=None,
     kernel_initializer="glorot_normal",
+    logits_only=False,
     name="danq",
 ):
     """Return `tf.keras` implementation of DanQ.
@@ -39,38 +40,37 @@ def get_model(
     > - Layer 3: 50%
     > - All other layers: 0%
     """
-    return tf.keras.Sequential(
-        [
-            tf.keras.layers.Conv1D(
-                filters=320,
-                kernel_size=26,
-                strides=1,
-                padding="valid",
-                kernel_initializer=kernel_initializer,
-                name="layer1/convolution",
-                input_shape=input_shape,
-            ),
-            tf.keras.layers.Activation(
-                first_activation or activation, name="layer1/activation"
-            ),
-            tf.keras.layers.MaxPool1D(pool_size=13, strides=13, name="layer1/maxpool"),
-            tf.keras.layers.Dropout(0.2, name="layer1/dropout"),
-            tf.keras.layers.Bidirectional(
-                tf.keras.layers.LSTM(units=320, return_sequences=True),
-                backward_layer=tf.keras.layers.LSTM(
-                    units=320, return_sequences=True, go_backwards=True
-                ),
-                merge_mode="concat",
-                name="bidirectional",
-            ),
-            tf.keras.layers.Dropout(0.5, name="bidirectional/dropout"),
-            tf.keras.layers.Flatten(name="flatten"),
-            tf.keras.layers.Dense(925, name="fully-connected"),
-            tf.keras.layers.Activation(activation, name="fully-connected/activation"),
-            tf.keras.layers.Dense(num_classes, name="logits"),
-            tf.keras.layers.Activation(
-                tf.keras.activations.sigmoid, name="predictions"
-            ),
-        ],
-        name=name,
-    )
+    layers = [
+        tf.keras.layers.Conv1D(
+                            filters=320,
+                            kernel_size=26,
+                            strides=1,
+                            padding="valid",
+                            kernel_initializer=kernel_initializer,
+                            name="layer1/convolution",
+                            input_shape=input_shape,
+                            ),
+        tf.keras.layers.Activation(
+            first_activation or activation, name="layer1/activation"
+                            ),
+        tf.keras.layers.MaxPool1D(pool_size=13, strides=13, name="layer1/maxpool"),
+        tf.keras.layers.Dropout(0.2, name="layer1/dropout"),
+        tf.keras.layers.Bidirectional(
+                    tf.keras.layers.LSTM(units=320, return_sequences=True),
+                                        backward_layer=tf.keras.layers.LSTM(
+                                        units=320, return_sequences=True, go_backwards=True
+                                        ),
+                                    merge_mode="concat",
+                                    name="bidirectional",
+                                ),
+        tf.keras.layers.Dropout(0.5, name="bidirectional/dropout"),
+        tf.keras.layers.Flatten(name="flatten"),
+        tf.keras.layers.Dense(925, name="fully-connected"),
+        tf.keras.layers.Activation(activation, name="fully-connected/activation"),
+        tf.keras.layers.Dense(num_classes, name="logits"),
+            ]
+    if not logits_only:
+        layers.append(tf.keras.layers.Activation('sigmoid'), name='probabilities')
+
+    model = tf.keras.Sequential(layers=layers, name=name)
+    return model
