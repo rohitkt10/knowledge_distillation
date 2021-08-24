@@ -1,9 +1,73 @@
 import tensorflow as tf
+from tensorflow import keras as tfk
+
 
 __all__ = ['get_model']
 
-def get_model(*args, **kwargs):
-	return DeepAtt(*args, **kwargs)
+def get_model(
+    input_shape=(1000, 4),
+    num_classes=919,
+    activation=tf.nn.relu,
+    first_activation=None,
+    kernel_initializer="glorot_normal",
+    logits_only=False,
+    name="deepatt",
+	num_heads=4,
+	num_dimensions=400,
+			):
+	assert num_dimensions%num_heads==0, 'The dimensionality of the MultiHeadAttention layer \
+										must be divisible by the number of attention heads.'
+	key_dim = int(num_dimensions/num_heads)
+
+	# layer 0
+	x = tfk.layers.Input(input_shape, name='input')
+
+	# 1st conv layer
+	y = tf.keras.layers.Conv1D(
+						filters=1024,
+						kernel_size=30,
+						strides=1,
+						padding="same",
+						activation=first_activation or "relu",
+					)(x)
+	y = tfk.layers.MaxPool1D(pool_size=10,)(y)
+	y = tfk.layers.Dropout(0.2)(y)
+
+	# bi directional LSTM layer
+	lstm_kwargs = {'units':512, 'return_sequences':True, 'return_state':True}
+	lstm_forward = tfk.layers.LSTM(**lstm_kwargs)
+	lstm_backward = tfk.layers.LSTM(go_backwards=True, **lstm_kwargs)
+	bidlstm = tfk.layers.Bidirectional(
+						lstm_forward, backward_layer=lstm_backward,
+									  )
+	y, *res = bidlstm(y)
+	print(y.shape)
+
+	# Multihead Attention
+	mha = tfk.layers.MultiHeadAttention(num_heads=num_heads, key_dim=key_dim)
+	y, *res = mha(y,y,y, return_attention_scores=True)
+	y = tfk.layers.Dropout(0.2)(y)
+
+	# point wise feed foward network
+	y = tfk.layers.Dense(100, activation='relu',)(y)  ## (batch, seq_len, 100)
+	y =	tfk.layers.Dense(num_classes, activation='linear')(y) ## (batch, seq_len, num classes)
+	y = tfk.layers.GlobalMaxPooling1D(data_format='channels_last')(y)
+
+	if not logits_only:
+		y = tfk.layers.Activation('sigmoid', name='probabilities')(y)
+
+	# final model
+	model = tfk.Model(x, y, name=name)
+	return model
+
+def positional_encoding(seq_len, d_model):
+    positions = np.arange(seq_len)[:, None]  ## array of positions ; shape = (L, 1)
+    I = np.arange(d_model)[None, :]  ## array of feature indices ; shape = (1, d_model)
+    angle_rads = positions / np.power(10000, 2*(I//2) / np.float32(d_model))  ## (L, d_model)
+    angle_rads[:, 0::2] = np.sin(angle_rads[:, 0::2]) ## even indexed features with sine encoding
+    angle_rads[:, 1::2] = np.cos(angle_rads[:, 1::2]) ## odd indexed features with cosine encoding
+    pos_encoding = angle_rads[None, ...]
+    return tf.cast(pos_encoding, dtype=tf.float32)
 
 class DeepAtt(tf.keras.Model):
     def __init__(self, first_activation, **unused):

@@ -41,6 +41,7 @@ def get_model(
     > - All other layers: 0%
     """
     layers = [
+        tf.keras.Input(input_shape, name="layer0/input"),
         tf.keras.layers.Conv1D(
                             filters=320,
                             kernel_size=26,

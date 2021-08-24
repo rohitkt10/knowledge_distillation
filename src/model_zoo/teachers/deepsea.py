@@ -16,6 +16,9 @@ def get_model(
     """
     padding = "valid"
     layers = [
+        # Layer 0
+        tf.keras.Input(input_shape, name='layer0/input'),
+        
         # Layer 1.
         tf.keras.layers.Conv1D(
             filters=320,
