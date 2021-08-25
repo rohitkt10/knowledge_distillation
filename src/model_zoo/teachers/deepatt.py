@@ -97,7 +97,8 @@ class DeepAtt(tf.keras.Model):
         # Note: Point-wise-dense == Category Dense (weight-share).
         self.point_wise_dense_1 = tf.keras.layers.Dense(units=100, activation="relu")
 
-        self.point_wise_dense_2 = tf.keras.layers.Dense(units=1, activation="sigmoid")
+        self.point_wise_dense_2 = tf.keras.layers.Dense(units=1, activation="sigmoid",)
+        #self.final_activation = tf.keras.layers.Activation("sigmoid", name='probabilities')
 
     def call(self, inputs, training=None, mask=None):
         """
@@ -149,6 +150,8 @@ class DeepAtt(tf.keras.Model):
         output = self.point_wise_dense_2(temp)
 
         output = tf.reshape(output, [-1, 919])
+
+        #output = self.final_activation(output)
 
         return output
 
