@@ -64,17 +64,18 @@ class BasicDistiller(Distiller):
         self.temperature = temperature
 
         # determine the distillation loss function and final layer activation
-        name = 'distill_loss'
-        if 'binary' in loss._name_scope:
-            self.distill_loss = BinaryKLDivergence(name=name)
+        self._set_distillation_loss()
+        if 'binary' in loss.__class__.__name__.lower():
             self.last_actfn = tf.math.sigmoid
             self.last_actfn_kwargs = {}
-        elif 'categorical' in loss._name_scope:
-            self.distill_loss = tfk.losses.KLDivergence(name=name)
+        elif 'categorical' in loss.__class__.__name__.lower():
             self.last_actfn = tf.nn.softmax
             self.last_actfn_kwargs = {'axis':-1}
         else:
             raise ValueError("Inappropriate loss function passed.")
+
+    def _set_distillation_loss(self,):
+        self.distill_loss = BinaryKLDivergence(name="distill_loss")
 
     def _get_distillation_loss(self, y_teacher, y_student):
         loss = self.distill_loss(
@@ -115,4 +116,14 @@ class BasicDistiller(Distiller):
         # finish remaining steps of train_step
         self.compiled_metrics.update_state(y, y_pred)
         res = {m.name:m.result() for m in self.metrics}
+        res.update({"distillation_loss":distill_loss})
         return res
+
+    def test_step(self, data):
+        x, y = data
+        y_pred_logits = self.student(x, training=False)
+        y_pred = self.last_actfn(y_pred_logits, **self.last_actfn_kwargs)
+        loss = self.compiled_loss(y, y_pred,regularization_losses=0.)
+        self.compiled_metrics.update_state(y, y_pred)
+        results = {m.name: m.result() for m in self.metrics}
+        return results
