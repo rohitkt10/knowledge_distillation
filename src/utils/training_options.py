@@ -53,10 +53,10 @@ def get_callbacks(monitor, ckptdir=None, save_best_only=True, save_freq="epoch",
 	"""
 	callbacks = []
 	if early_stopping:
-		es_callback = tfk.callbacks.EarlyStopping(monitor, patience=20, verbose=1, mode='max',)
+		es_callback = tfk.callbacks.EarlyStopping(monitor, patience=7, verbose=1, mode='max',)
 		callbacks.append(es_callback)
 	if reduce_lr_on_plateau:
-		lr_callback = tfk.callbacks.ReduceLROnPlateau(monitor, patience=20, verbose=1, mode='max')
+		lr_callback = tfk.callbacks.ReduceLROnPlateau(monitor, patience=3, verbose=1, mode='max')
 		callbacks.append(lr_callback)
 	if log_to_csv:
 		csvlogger = tfk.callbacks.CSVLogger(os.path.join(ckptdir, "log.csv"))

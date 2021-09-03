@@ -61,13 +61,14 @@ class ShiftAugmentation(Augmentation):
         return (xs, y)
 
 class AugmentedModel(tfk.Model):
-    def __init__(self, model, augmentations, *args, **kwargs):
+    def __init__(self, model, augmentations, subsample=False, *args, **kwargs):
         super().__init__(*args, **kwargs)
         assert len(augmentations) > 0, 'Pass some augmentation strategies.'
         assert np.all([isinstance(aug, Augmentation) for aug in augmentations]), \
                             'Augmentations have to be instances of the Augmentation class'
         self.model = model
         self.augmentations = augmentations
+        self.subsample = subsample
 
     def call(self, *args, **kwargs):
         return self.model.call(*args, **kwargs)
@@ -94,5 +95,16 @@ class AugmentedModel(tfk.Model):
         return data
 
     def train_step(self, data):
-        data = self.get_augmented_data(data)
-        return super().train_step(data)
+        if not self.subsample:
+            augmented_data = self.get_augmented_data(data)
+            return super().train_step(augmented_data)
+        else:
+            batchsize = tf.shape(data[0])[0] # true batch size
+            augmented_data = self.get_augmented_data(data)
+            augmented_batchsize = tf.shape(augmented_data[0])[0] # augmented batch size
+            subsample_idx = tf.random.uniform((batchsize,), 0., tf.cast(augmented_batchsize, tf.float32))
+            subsample_idx = tf.cast(tf.math.round(subsample_idx), tf.int32)
+            x, y = data
+            x, y = tf.gather(x, subsample_idx), tf.gather(y, subsample_idx)
+            data = (x, y)
+            return super().train_step(data)

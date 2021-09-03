@@ -89,8 +89,11 @@ class BasicDistiller(Distiller):
             data = self.student.get_augmented_data(data)
 
         # unpack data tuple and get teacher model predictions
-        x, y = data
-        y_pred_teacher_logits = self.teacher(x, training=False) ## logits of teacher model (batch, numtasks,)
+        if self.precompute_teacher_logits:
+            (x, y), y_pred_teacher_logits = data
+        else:
+            x, y = data
+            y_pred_teacher_logits = self.teacher(x, training=False) ## logits of teacher model (batch, numtasks,)
         y_pred_teacher = self.last_actfn(y_pred_teacher_logits, **self.last_actfn_kwargs)
 
         # record differentiable operations

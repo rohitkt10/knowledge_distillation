@@ -7,12 +7,15 @@ class Distiller(tfk.Model):
 	"""
 	A base class for various distillation strategies.
 	"""
-	def __init__(self, student, teacher, *args, **kwargs):
+	def __init__(self, student, teacher=None, precompute_teacher_logits=False, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		if teacher.trainable:
-			teacher.trainable = False
+		if precompute_teacher_logits:
+			self.precompute_teacher_logits = precompute_teacher_logits ## if precomputed logits
+														## are available use that.
+		else:
+			assert teacher, "Teacher model not passed."
+			self.teacher = teacher
 		self.student = student
-		self.teacher = teacher
 
 	def call(self, inputs, *args, **kwargs):
 		return self.student.call(inputs, *args, **kwargs,)
