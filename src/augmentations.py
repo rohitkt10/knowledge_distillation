@@ -17,34 +17,48 @@ class Augmentation():
         raise NotImplementedError()
 
 class MixupAugmentation(Augmentation):
-    def __init__(self, alpha=1.):
+    def __init__(self, alpha=0.2):
         self.lam_dist = tfd.Beta(alpha, alpha)
+
+    def _einsum_exp(self, x):
+        n = len(x.shape)
+        if n == 2:
+            return "ij, i -> ij"
+        elif n == 3:
+            return "ijk, i -> ijk"
+        elif n == 4:
+            return "ijkl, i -> ijkl"
+        else:
+            raise NotImplementedError()
+
     def __call__(self, data):
-        x, y = data
+        x, *y = data
         idxs = tf.random.shuffle(tf.range(tf.shape(x)[0]))
-        xp, yp = tf.gather(x, idxs, axis=0), tf.gather(y, idxs, axis=0)
+        xp, yp = tf.gather(x, idxs, axis=0), [tf.gather(_y, idxs, axis=0) for _y in y]
         lam = self.lam_dist.sample(tf.shape(x)[0])
-        xm, ym = lam[:, None, None]*x + (1-lam[:, None, None])*xp, lam[:, None]*y + (1-lam[:, None])*yp
-        return (xm, ym)
+        exp = self._einsum_exp(x)
+        xm, ym = tf.einsum(exp, x, lam) + tf.einsum(exp, x, 1.-lam), \
+        [lam[:, None]*_y + (1-lam[:, None])*_yp for (_y, _yp) in zip(y, yp)]
+        return (xm,) + tuple(ym)
 
 class GaussianNoiseAugmentation(Augmentation):
     def __init__(self, mean=0., stddev=1e-2,softmax=True):
         self.gdist = tfd.Normal(loc=mean, scale=stddev)
         self.softmax = softmax
     def __call__(self, data):
-        x, y = data
+        x, *y = data
         delta = self.gdist.sample(tf.shape(x))
         if self.softmax:
             xd = tf.nn.softmax(x + delta, axis=-1)
         else:
             xd = x + delta
-        return (xd, y)
+        return (xd,) + tuple(y)
 
 class RCAugmentation(Augmentation):
     def __call__(self, data):
-        x, y = data
+        x, *y = data
         x_rc = x[:, ::-1, ::-1]
-        return (x_rc, y)
+        return (x_rc,) + tuple(y)
 
 class ShiftAugmentation(Augmentation):
     def __init__(self, shift, direction='right'):
@@ -53,12 +67,12 @@ class ShiftAugmentation(Augmentation):
         self.shift = int(shift)
         self.direction = direction.lower()
     def __call__(self, data):
-        x, y = data
+        x, *y = data
         if self.direction == 'right':
             xs = tf.roll(x, shift=self.shift, axis=1)
         else:
             xs = tf.roll(x, shift=-self.shift, axis=1)
-        return (xs, y)
+        return (xs,) + tuple(y)
 
 class AugmentedModel(tfk.Model):
     def __init__(self, model, augmentations, subsample=False, *args, **kwargs):
@@ -84,27 +98,29 @@ class AugmentedModel(tfk.Model):
         super().compile(*args, **kwargs)
 
     def get_augmented_data(self, data):
-        x, y = data
-        xs, ys = [x], [y]
+        augmented_data = []
+        n = len(data) ## number of tensors in the data tuple
+        N = tf.shape(data[0])[0] # original batch size
         for augmentation in self.augmentations:
-            _x, _y = augmentation(data)
-            xs.append(_x)
-            ys.append(_y)
-        x, y = tf.concat(xs, axis=0), tf.concat(ys, axis=0)
-        data = (x, y)
-        return data
+            augmented_data.append(augmentation(data))
+        tensors = []  ## this will contain the list of augmented inputs and label tensors
+        for i in range(n):
+            tensor = []
+            for j in range(len(augmented_data)):
+                tensor.append(augmented_data[j][i])
+            tensor = tf.concat(tensor, axis=0)
+            tensors.append(tensor)
+
+        # subsample the augmented tensors if asked
+        if not self.subsample:
+            return tuple(tensors)
+        else:
+            M = tf.shape(tensors[0])[0]  ## batch size of the augmented dataset
+            idx = tf.squeeze(tf.random.categorical(logits=tf.ones((1, N)), num_samples=M, dtype=tf.int32))
+            for i in range(len(tensors)):
+                tensors[i] = tf.gather(tensors[i], idx)
+            return tuple(tensors)
 
     def train_step(self, data):
-        if not self.subsample:
-            augmented_data = self.get_augmented_data(data)
-            return super().train_step(augmented_data)
-        else:
-            batchsize = tf.shape(data[0])[0] # true batch size
-            augmented_data = self.get_augmented_data(data)
-            augmented_batchsize = tf.shape(augmented_data[0])[0] # augmented batch size
-            subsample_idx = tf.random.uniform((batchsize,), 0., tf.cast(augmented_batchsize, tf.float32))
-            subsample_idx = tf.cast(tf.math.round(subsample_idx), tf.int32)
-            x, y = data
-            x, y = tf.gather(x, subsample_idx), tf.gather(y, subsample_idx)
-            data = (x, y)
-            return super().train_step(data)
+        data = self.get_augmented_data(data)
+        return super().train_step(data)

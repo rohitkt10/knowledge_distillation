@@ -3,32 +3,17 @@ from tensorflow import keras as tfk
 from ._distiller import Distiller
 from ..augmentations import Augmentation, AugmentedModel
 from ..utils.loss_functions import BinaryKLDivergence
+from tensorflow.keras.losses import KLDivergence
 
-__all__ = ['BasicDistiller']
+__all__ = ['OnlineDistiller']
 
-class BasicDistiller(Distiller):
-    """
-    Implementation of the basic distillation process
-    as detailed in Hinton et al (2015) [1].
-
-    The loss function is a combination of the standard
-    classification losss from the data plus the classification
-    loss on the temperature modulated soft targets generated
-    from the teacher model.
-
-    Currently this model is setup for distilling classifiers (binary or multiclass).
-
-    REFERENCES:
-    [1] Hinton, G., Vinyals, O., & Dean, J. (2015).
-        Distilling the knowledge in a neural network.
-        arXiv preprint arXiv:1503.02531.
-    """
+class OnlineDistiller(Distiller):
     def __init__(self,
                 student,
-                teacher=None,
-                precompute_teacher_logits=None,
+                teacher,
                 *args, **kwargs):
-        super().__init__(student, teacher, precompute_teacher_logits, *args, **kwargs)
+        super().__init__(student, teacher, None, *args, **kwargs)
+        self.teacher.trainable = True
 
     def compile(self, optimizer, loss, metrics=None, alpha=1., temperature=1., *args, **kwargs):
         """
@@ -60,23 +45,28 @@ class BasicDistiller(Distiller):
         """
         assert isinstance(loss, tfk.losses.Loss)
         self.student.compile(optimizer, loss, metrics, *args, **kwargs)
+        self.teacher.compile(optimizer, loss, metrics, *args, **kwargs)
         super().compile(optimizer, loss, metrics, *args, **kwargs)
         self.alpha = alpha
         self.temperature = temperature
 
         # determine the distillation loss function and final layer activation
-        self._set_distillation_loss()
         if 'binary' in loss.__class__.__name__.lower():
             self.last_actfn = tf.math.sigmoid
             self.last_actfn_kwargs = {}
+            self._set_distillation_loss(losstype='binary')
         elif 'categorical' in loss.__class__.__name__.lower():
             self.last_actfn = tf.nn.softmax
             self.last_actfn_kwargs = {'axis':-1}
+            self._set_distillation_loss(losstype='categorical')
         else:
             raise ValueError("Inappropriate loss function passed.")
 
-    def _set_distillation_loss(self,):
-        self.distill_loss = BinaryKLDivergence(name="distill_loss")
+    def _set_distillation_loss(self, losstype='binary'):
+        if losstype == 'binary':
+            self.distill_loss = BinaryKLDivergence(name="distill_loss")
+        elif losstype == 'categorical':
+            self.distill_loss = KLDivergence(name="distill_loss")
 
     def _get_distillation_loss(self, y_teacher, y_student):
         loss = self.distill_loss(
@@ -86,55 +76,50 @@ class BasicDistiller(Distiller):
         return loss
 
     def train_step(self, data):
-        if self.precompute_teacher_logits:
-            data = data[0] + (data[1],) ## rearrange data
-
+        # unpack data
         if isinstance(self.student, AugmentedModel):
             data = self.student.get_augmented_data(data)
-
-        # unpack data tuple and get teacher model predictions
-        if self.precompute_teacher_logits:
-            x, y, y_pred_teacher_logits = data
-        else:
-            x, y = data
-            y_pred_teacher_logits = self.teacher(x, training=False) ## logits of teacher model (batch, numtasks,)
-        y_pred_teacher = self.last_actfn(y_pred_teacher_logits, **self.last_actfn_kwargs)
+        x, y = data
 
         # record differentiable operations
         with tf.GradientTape() as tape:
-            # get the data loss
+            # get the teacher and student predictions
             y_pred_logits = self.student(x, training=True)  ## logits of the student model
+            y_pred_teacher_logits = self.teacher(x, training=True) ## logits of the teacher model
             y_pred = self.last_actfn(y_pred_logits, **self.last_actfn_kwargs)
-            loss = self.compiled_loss(y, y_pred, regularization_losses=self.student.losses)
+            y_pred_teacher = self.last_actfn(y_pred_teacher_logits, **self.last_actfn_kwargs)
 
-            # get the distillation loss
+            # get the total student loss
+            student_loss = self.compiled_loss(y, y_pred, regularization_losses=self.student.losses)  ## data loss + reg. loss
             soft_teacher_logits = y_pred_teacher_logits / self.temperature
             soft_student_logits = y_pred_logits / self.temperature
             distill_loss = self._get_distillation_loss(soft_teacher_logits, soft_student_logits)
+            total_student_loss = student_loss + distill_loss*self.alpha
 
-            # get the total loss
-            total_loss = loss + distill_loss*self.alpha
+            # get the total teacher loss
+            teacher_loss = self.loss(y, y_pred_teacher)
+            total_teacher_loss = teacher_loss + tf.add_n(self.teacher.losses)
+
+            total_loss = total_student_loss + total_teacher_loss
 
         # compute gradients and take SGD step
-        variables = self.student.trainable_variables
+        variables = self.student.trainable_variables + self.teacher.variables
         gradients = tape.gradient(total_loss, variables)
         self.optimizer.apply_gradients(zip(gradients, variables))
 
         # finish remaining steps of train_step
         self.compiled_metrics.update_state(y, y_pred)
         res = {m.name:m.result() for m in self.metrics}
-        res.update({"distillation_loss":distill_loss})
+        res.update({"teacher_loss":teacher_loss, "distillation_loss":distill_loss})
         return res
 
     def test_step(self, data):
-        if self.precompute_teacher_logits:
-            data = data[0] + (data[1],) ## rearrange data
+        x, y = data
 
-        x, *y = data
         #y_true = y[0]
         y_pred_logits = self.student(x, training=False)
         y_pred = self.last_actfn(y_pred_logits, **self.last_actfn_kwargs)
-        loss = self.compiled_loss(y[0], y_pred,regularization_losses=0.)
-        self.compiled_metrics.update_state(y[0], y_pred)
+        loss = self.compiled_loss(y, y_pred,regularization_losses=0.)
+        self.compiled_metrics.update_state(y, y_pred)
         results = {m.name: m.result() for m in self.metrics}
         return results
