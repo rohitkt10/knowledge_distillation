@@ -27,5 +27,5 @@ def danq(ckptdir, logits_only=False, *args, **kwargs):
                                 **kwargs,
                                  )
     if logits_only:
-        model.pop() ## remove the sigmoid activation last layer 
+        model.pop() ## remove the sigmoid activation last layer
     return model

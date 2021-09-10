@@ -9,13 +9,29 @@ class Distiller(tfk.Model):
 	"""
 	def __init__(self, student, teacher=None, precompute_teacher_logits=False, *args, **kwargs):
 		super().__init__(*args, **kwargs)
-		if precompute_teacher_logits:
-			self.precompute_teacher_logits = precompute_teacher_logits ## if precomputed logits
-														## are available use that.
-		else:
+		if not precompute_teacher_logits:
 			assert teacher, "Teacher model not passed."
-			self.teacher = teacher
-		self.student = student
+
+		self.precompute_teacher_logits = False
+		self._teacher = teacher
+		self._teacher.trainable = False
+		self._student = student
+
+	@property
+	def teacher(self):
+		return self._teacher
+
+	@property
+	def student(self):
+		return self._student
+
+	@teacher.setter
+	def teacher(self, model):
+		self._teacher = model
+
+	@student.setter
+	def student(self, model):
+		self._student = model
 
 	def call(self, inputs, *args, **kwargs):
 		return self.student.call(inputs, *args, **kwargs,)

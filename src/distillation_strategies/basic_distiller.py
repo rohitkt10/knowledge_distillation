@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow import keras as tfk
 from ._distiller import Distiller
@@ -99,6 +100,7 @@ class BasicDistiller(Distiller):
             x, y = data
             y_pred_teacher_logits = self.teacher(x, training=False) ## logits of teacher model (batch, numtasks,)
         y_pred_teacher = self.last_actfn(y_pred_teacher_logits, **self.last_actfn_kwargs)
+        #print(y_pred_teacher)
 
         # record differentiable operations
         with tf.GradientTape() as tape:
