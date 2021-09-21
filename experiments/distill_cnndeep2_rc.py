@@ -1,5 +1,5 @@
 """
-Basic distillation of the CNN deep architecture
+Basic distillation of the CNN deep 2 architecture
 pretrained with the truncated deepsea dataset.
 """
 
@@ -15,7 +15,7 @@ from tensorflow import keras as tfk
 
 from src import RCAugmentation, MixupAugmentation, GaussianNoiseAugmentation, AugmentedModel
 from src.distillation_strategies import BasicDistiller as Distiller
-from src.model_zoo.students import truncated_cnn_deep
+from src.model_zoo.students import truncated_cnn_deep_2
 from src.utils.callbacks import ModelEvaluationCallback
 from src.utils.dataloaders import get_truncated_deepsea_dataset as dataloader
 
@@ -34,7 +34,6 @@ def main():
     parser.add_argument("--gaussian_noise", default=0., type=float, help="standard deviation of input Gaussian noise")
     parser.add_argument("--rc", action="store_true", help="Add reverse compliment data augmentation")
     parser.add_argument("--no-rc", action="store_true", help="Do not add reverse compliment data augmentation")
-    parser.add_argument("--exptname", default='expt', type=str, help="Name of the experiment directory.")
     args = parser.parse_args()
 
     # load the dataset
@@ -42,12 +41,12 @@ def main():
     dataset = dataloader(datadir)
 
     # set up teacher model
-    teacher = tfk.models.load_model(os.path.join("../pretrained_models/cnn_deep/rc/trial_0001/ckpt_epoch-0049"))
+    teacher = tfk.models.load_model(os.path.join("../pretrained_models/cnn_deep_2"))
     teacher = tfk.Model(inputs=teacher.inputs, outputs=teacher.layers[-2].output, name=teacher.name)
     teacher.trainable = False
 
     # set up student model
-    student = truncated_cnn_deep.get_model(
+    student = truncated_cnn_deep_2.get_model(
                                     truncation_factor=args.factor,
                                     l2=1e-6,
                                     logits_only=True,
@@ -84,17 +83,27 @@ def main():
 
     # set up callbacks
     RC = 'rc' if args.rc else 'no-rc'
-    savedir = os.path.abspath(f"results/basic_distillation/cnn_deep_distillation/{args.exptname}/")
-    trialnum = 1+len([f for f in os.listdir(savedir) if 'trial' in f])
-    savedir = os.path.join(savedir, f"trial_{trialnum:04d}")
+    dirname = "rc" if RC == 'rc' else "no_augmentation"
+    savedir = os.path.abspath(f"results/basic_distillation/cnn_deep_2_distillation/{dirname}")
     hyperparams = f"factor={args.factor}/temperature={args.temperature}/alpha={args.alpha}"
     savedir = os.path.join(savedir, hyperparams)
+    if not os.path.exists(savedir):
+        trialnum = 1
+    else:
+        trialnum = 1+len([f for f in os.listdir(savedir) if 'trial' in f])
+    savedir = os.path.join(savedir, f"trial_{trialnum:04d}")
     if not os.path.exists(savedir):
         os.makedirs(savedir)
     lr_callback = tfk.callbacks.ReduceLROnPlateau(monitor='val_aupr', \
                                         patience=4, mode='max', min_lr=1e-7, )
     es_callback = tfk.callbacks.EarlyStopping(monitor='val_aupr', patience=8, mode='max',verbose=1, )
-    ckpt_callback = tfk.callbacks.ModelCheckpoint(os.path.join(savedir, "ckpt_epoch-{epoch:04d}"), monitor='val_aupr', mode='max', save_best_only=True, save_weights_only=False)
+    ckpt_callback = tfk.callbacks.ModelCheckpoint(
+                                        os.path.join(savedir, "ckpt_epoch-{epoch:04d}"),
+                                        monitor='val_aupr',
+                                        mode='max',
+                                        save_best_only=True,
+                                        save_weights_only=False
+                                                )
     eval_callback = ModelEvaluationCallback(
                             dataset['test'].batch(128),
                             filepath=os.path.join(savedir,"model_evaluation.csv")

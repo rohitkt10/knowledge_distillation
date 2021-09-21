@@ -24,6 +24,7 @@ class BasicDistiller(Distiller):
         Distilling the knowledge in a neural network.
         arXiv preprint arXiv:1503.02531.
     """
+
     def __init__(self,
                 student,
                 teacher=None,
@@ -62,8 +63,9 @@ class BasicDistiller(Distiller):
         assert isinstance(loss, tfk.losses.Loss)
         self.student.compile(optimizer, loss, metrics, *args, **kwargs)
         super().compile(optimizer, loss, metrics, *args, **kwargs)
-        self.alpha = alpha
-        self.temperature = temperature
+        self.alpha = tf.Variable(alpha, dtype=tf.float32, trainable=False)
+        self.temperature = tf.Variable(temperature, dtype=tf.float32, trainable=False)
+
 
         # determine the distillation loss function and final layer activation
         self._set_distillation_loss()

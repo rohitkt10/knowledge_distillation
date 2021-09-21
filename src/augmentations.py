@@ -61,17 +61,17 @@ class RCAugmentation(Augmentation):
         return (x_rc,) + tuple(y)
 
 class ShiftAugmentation(Augmentation):
-    def __init__(self, shift, direction='right'):
-        assert direction.lower() in ['right', 'left']
-        assert shift > 0
-        self.shift = int(shift)
-        self.direction = direction.lower()
+    def __init__(self, max_shift,):
+        assert max_shift > 0
+        self.max_shift = int(max_shift)
+
     def __call__(self, data):
         x, *y = data
-        if self.direction == 'right':
-            xs = tf.roll(x, shift=self.shift, axis=1)
-        else:
-            xs = tf.roll(x, shift=-self.shift, axis=1)
+        shift = tf.cast(
+                    tf.random.uniform(shape=(), minval=self.max_shift-1, maxval=self.max_shift+1),
+                    tf.int32
+                        )
+        xs = tf.roll(x, shift=shift, axis=1)
         return (xs,) + tuple(y)
 
 class AugmentedModel(tfk.Model):
